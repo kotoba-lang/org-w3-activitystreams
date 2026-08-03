@@ -3,17 +3,18 @@
             [clojure.java.shell :as shell]
             [clojure.test :refer [deftest is testing]]
             [kotoba.compiler.core :as compiler]
-            [kotoba.compiler.ir :as ir]))
+            [kotoba.kir :as ir]))
 
 (def source (slurp "src/activitystreams.kotoba"))
 (defn call [kir function & args] (ir/execute kir function (vec args)))
 (defn dstr [value] ["string" value])
 (defn dkw [value] ["keyword" value])
 (defn dmap [entries]
-  ["map" (->> entries (sort-by (comp str key)) (mapv (fn [[key value]] [key value])))])
+  ["map" (->> entries (sort-by (comp str key))
+              (mapv (fn [[key value]] [(dkw key) value])))])
 (defn dvec [& values] ["vector" (vec values)])
 (defn dget [document key]
-  (some (fn [[candidate value]] (when (= candidate key) value)) (second document)))
+  (some (fn [[candidate value]] (when (= candidate (dkw key)) value)) (second document)))
 
 (deftest reference-preserves-activitystreams-contract
   (let [kir (:kir (compiler/compile-source source :js-kotoba-v1))
@@ -59,10 +60,10 @@
                (str "import(process.argv[1]).then(async host=>{"
                     "const j=await import('data:text/javascript;base64," js64 "');"
                     "const w=await host.instantiateKotoba(Buffer.from(process.argv[2],'base64'));"
-                    "const run=(x,doc)=>{const note=x.note(doc(['map',[[':content',['string','hello']]]]));"
-                    "const props=doc(['map',[[':actor',['string','alice']],[':object',note],[':to',['string','Public']]]]);"
+                    "const run=(x,doc)=>{const map=e=>doc(['map',e.map(([k,v])=>[['keyword',k],v])]);const note=x.note(map([[':content',['string','hello']]]));"
+                    "const props=map([[':actor',['string','alice']],[':object',note],[':to',['string','Public']]]);"
                     "const a=x.create(props);if(x['activity?'](a)!==true||x['activity?'](note)!==false)throw Error('activity');"
-                    "const validation=x.validate(a);if(x.errors(a)[1].length!==0||validation[1].find(e=>e[0]===':valid?')[1][1]!==true||x['ensure-vector'](doc(['null']))[1].length!==0)throw Error('validation');"
+                    "const validation=x.validate(a);if(x.errors(a)[1].length!==0||validation[1].find(e=>e[0][0]==='keyword'&&e[0][1]===':valid?')[1][1]!==true||x['ensure-vector'](doc(['null']))[1].length!==0)throw Error('validation');"
                     "let rejected=false;try{x.note(doc(['vector',[]]))}catch(e){rejected=true}if(!rejected)throw Error('reject');};"
                     "run(j.instantiateKotoba({}),x=>x);run(w.instance.exports,w.typedValues.document);"
                     "}).catch(e=>{console.error(e);process.exit(99)})")
