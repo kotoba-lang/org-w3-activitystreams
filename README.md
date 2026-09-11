@@ -10,5 +10,5 @@ and malformed document shapes fail closed.
 ## Test
 
 ```bash
-clojure -M:test
+kbb -M:test
 ```
